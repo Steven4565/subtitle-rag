@@ -1,8 +1,7 @@
 from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk
-from collections import deque
 import os
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
@@ -65,7 +64,18 @@ client.inference.put(
 )
 
 
-for hit in hits: 
-    print()
-    print(hit["_source"]["text"])
-    print(hit["_score"])
+candidates = [hit["_source"]["text"] for hit in hits]
+
+url = "http://localhost:8000/rerank"
+payload = {
+    "query": query, 
+    "candidates": candidates
+}
+
+response = requests.post(url, json=payload)
+
+if response.status_code == 200:
+    result = response.json()
+    print(result["reranked"])
+else:
+    print(f"Error {response.status_code}: {response.text}")

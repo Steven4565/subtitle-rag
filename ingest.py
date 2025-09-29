@@ -4,7 +4,6 @@ from collections import deque
 import srt
 import os
 from dotenv import load_dotenv
-from transformers import AutoModel
 load_dotenv()
 
 subtitle_dir = "./subtitles/"
@@ -136,3 +135,4 @@ def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
 chunks = chunk_subtitles_by_words(videos)
 
 bulk(client, chunks)
+client.index(index=index_name,  document=chunks[0]["_source"])
