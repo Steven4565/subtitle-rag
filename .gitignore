@@ -216,3 +216,6 @@ __marimo__/
 .streamlit/secrets.toml
 subtitles/*
 bge-reranker-v2-m3/
+pyrightconfig.json
+all-MiniLM-L6-v2/
+

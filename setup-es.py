@@ -12,20 +12,18 @@ client = Elasticsearch(
 
 index_name = "search-test"
 
-if (not client.indices.exists(index=index_name)):
-    client.indices.create(index=index_name)
-else: 
+if (client.indices.exists(index=index_name)):
     client.indices.delete(index=index_name)
-    client.indices.create(index=index_name)
+client.indices.create(index=index_name)
 
 mappings = {
 "properties": {
-    "semantic": {
-        "type": "semantic_text",
+    "dense": {
+        "type": "dense_vector",
+        "dims": 384
     },
     "text": {
         "type": "text",
-        "copy_to": "semantic"
     },
     "video": {
         "type": "text",
