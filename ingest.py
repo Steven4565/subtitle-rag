@@ -1,10 +1,16 @@
+from FlagEmbedding.inference import embedder
 from elasticsearch import Elasticsearch
+import math, time, requests
+import requests
 from elasticsearch.helpers import bulk
 from collections import deque
 import srt
 import os
 from dotenv import load_dotenv
 load_dotenv()
+
+
+embedder_url = "http://localhost:8000/dense"
 
 subtitle_dir = "./subtitles/"
 videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
@@ -134,5 +140,44 @@ def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
 
 chunks = chunk_subtitles_by_words(videos)
 
+
+def process_dense_batched(chunks, batch_size=64, sleep=0.0, timeout=60):
+    session = requests.Session()
+    total = len(chunks)
+    out_vectors = [None] * total
+
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
+        batch = chunks[start:end]
+        passages = [c["_source"]["text"] for c in batch]
+
+        payload = {"passages": passages}
+        resp = session.post(embedder_url, json=payload, timeout=timeout)
+        if resp.status_code != 200:
+            raise RuntimeError(f"[{start}:{end}] {resp.status_code}: {resp.text}")
+
+        emb = resp.json()["embeddings"]
+        if len(emb) != len(batch):
+            raise ValueError(f"[{start}:{end}] length mismatch {len(emb)} vs {len(batch)}")
+
+        # write into output buffer
+        for i, vec in enumerate(emb):
+            out_vectors[start + i] = vec
+
+        if sleep:
+            time.sleep(sleep)
+
+    # sanity check
+    if any(v is None for v in out_vectors):
+        raise RuntimeError("Some embeddings missing")
+
+    # attach embeddings back to chunks
+    for chunk, vec in zip(chunks, out_vectors):
+        chunk["_source"]["dense"] = vec
+
+    return chunks
+
+process_dense_batched(chunks)
+
+print(len(chunks))
 bulk(client, chunks)
-client.index(index=index_name,  document=chunks[0]["_source"])

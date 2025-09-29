@@ -32,8 +32,8 @@ res = client.search(
                 },
                 "standard": {
                     "query": {
-                        "semantic": {
-                            "field": "semantic",
+                        "dense": {
+                            "field": "dense",
                             "query": query
                         }
                     }
@@ -43,7 +43,6 @@ res = client.search(
     }
 )
 
-best_hit = res["hits"]["hits"][0]
 hits = res["hits"]["hits"]
 
 # Rerank hits
