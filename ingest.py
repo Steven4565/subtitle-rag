@@ -1,8 +1,5 @@
-from FlagEmbedding.inference import embedder
-from elasticsearch import Elasticsearch
-import math, time, requests
-import requests
-from elasticsearch.helpers import bulk
+from opensearchpy import OpenSearch
+from opensearchpy.helpers import bulk
 from collections import deque
 import srt
 import os
@@ -10,14 +7,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-embedder_url = "http://localhost:8000/dense"
-
 subtitle_dir = "./subtitles/"
 videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
 
-client = Elasticsearch(
-    os.getenv("ES_ENDPOINT"),
-    api_key=os.getenv("API_KEY")
+client = OpenSearch(
+    hosts=[{"host": "desktop", "port": 9200}],
+    http_auth=("admin", os.getenv("PASSWORD")),
+    use_ssl=True,
+    verify_certs=False,
+    ssl_assert_hostname=False,
+    ssl_show_warn=False
 )
 
 index_name = "search-test"
@@ -55,16 +54,19 @@ def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
             sources.append(sl["index"])
 
         chunk_text = " ".join([p for p in parts if p])
-        chunks.append({
-            "_index": index_name,
-            "_source": {
-                "text": chunk_text,
-                "video": buffer_slices[0]["video"],
-                "sources": sources
-            }
-        })
+        chunks.append(
+            {
+                "_op_type": "index",
+                "_index": index_name,
+                "pipeline": "emb-minilm",
+                "_source": {
+                    "text": chunk_text,
+                    "video": buffer_slices[0]["video"],
+                    "sources": sources
+                }
+            },
+        )
 
-        
         if overlap_words == 0:
             buffer_slices.clear()
             current_words = 0
@@ -124,7 +126,7 @@ def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
                 if current_words == 0 and (n - i) > max_words_per_chunk:
                     add_slice(vid, sub, words, i, i + max_words_per_chunk)
                     i += max_words_per_chunk
-                    emit_chunk()
+                    emit_chunk() 
                     continue
 
                 add_slice(vid, sub, words, i, i + take)
@@ -140,44 +142,4 @@ def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
 
 chunks = chunk_subtitles_by_words(videos)
 
-
-def process_dense_batched(chunks, batch_size=64, sleep=0.0, timeout=60):
-    session = requests.Session()
-    total = len(chunks)
-    out_vectors = [None] * total
-
-    for start in range(0, total, batch_size):
-        end = min(start + batch_size, total)
-        batch = chunks[start:end]
-        passages = [c["_source"]["text"] for c in batch]
-
-        payload = {"passages": passages}
-        resp = session.post(embedder_url, json=payload, timeout=timeout)
-        if resp.status_code != 200:
-            raise RuntimeError(f"[{start}:{end}] {resp.status_code}: {resp.text}")
-
-        emb = resp.json()["embeddings"]
-        if len(emb) != len(batch):
-            raise ValueError(f"[{start}:{end}] length mismatch {len(emb)} vs {len(batch)}")
-
-        # write into output buffer
-        for i, vec in enumerate(emb):
-            out_vectors[start + i] = vec
-
-        if sleep:
-            time.sleep(sleep)
-
-    # sanity check
-    if any(v is None for v in out_vectors):
-        raise RuntimeError("Some embeddings missing")
-
-    # attach embeddings back to chunks
-    for chunk, vec in zip(chunks, out_vectors):
-        chunk["_source"]["dense"] = vec
-
-    return chunks
-
-process_dense_batched(chunks)
-
-print(len(chunks))
-bulk(client, chunks)
+bulk(client, actions=chunks)

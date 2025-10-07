@@ -1,80 +1,61 @@
-from elasticsearch import Elasticsearch
+from opensearchpy import OpenSearch
 import os
 from dotenv import load_dotenv
-import requests
 
 load_dotenv()
 
 subtitle_dir = "./subtitles/"
 videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
 
-client = Elasticsearch(
-    os.getenv("ES_ENDPOINT"),
-    api_key=os.getenv("API_KEY")
+MODEL_ID = "c3sXuJkBnoPkpWRkhFjQ"
+
+client = OpenSearch(
+    hosts=[{"host": "desktop", "port": 9200}],
+    http_auth=("admin", os.getenv("PASSWORD")),
+    use_ssl=True,
+    verify_certs=False,
+    ssl_assert_hostname=False,
+    ssl_show_warn=False
 )
 
 index_name = "search-test"
 
 query = "How fast should voice agents respond?"
 
-res = client.search(
-    index=index_name,
-    size=10,
-    retriever={
-        "rrf": {
-            "retrievers": {
-                "standard": {
-                    "query": {
-                        "match": {
-                            "text": query
-                        }
-                    }
-                },
-                "standard": {
-                    "query": {
-                        "dense": {
-                            "field": "dense",
-                            "query": query
-                        }
-                    }
+body = {
+  "size": 10,
+  "query": {
+    "hybrid": {
+      "queries": [
+        {
+            "match": {"text": query}
+        },
+        {
+            "neural": {
+                "dense": {
+                    "query_text": query,
+                    "model_id": MODEL_ID,
+                    "k": 50
                 }
             }
-        }
+         }
+      ]
     }
-)
-
-hits = res["hits"]["hits"]
-
-# Rerank hits
-
-model_id = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-
-client.inference.put(
-    task_type="rerank",
-    inference_id="bge-m3-reranker-local",
-    inference_config={
-        "service": "elasticsearch",
-        "service_settings": {
-            "model_id": "baai__bge-reranker-v2-m3",
-            "num_allocations": 1,
-            "num_threads": 1
-        }
+  },
+  "ext": {
+    "rerank": {
+      "query_context": {
+        "query_text": query
+      }
     }
-)
-
-
-candidates = [hit["_source"]["text"] for hit in hits]
-
-url = "http://localhost:8000/rerank"
-payload = {
-    "query": query, 
-    "candidates": candidates
+  },
+  "_source": {"exclude": ["dense"]}
 }
 
-response = requests.post(url, json=payload)
-
-if response.status_code == 200:
-    result = response.json()
-    print(result["reranked"])
-else:
-    print(f"Error {response.status_code}: {response.text}")
+res = client.search(index="search-test", body=body,
+                     params={"search_pipeline": "hybrid-rrf-then-rerank"})
+hits = res["hits"]["hits"]
+candidates = [hit["_source"]["text"] for hit in hits]
+for c in candidates: 
+    print(c)
+    print()
