@@ -94,6 +94,16 @@ def put_search_pipeline(pipeline_id: str, body: dict):
 
 put_search_pipeline("hybrid-rrf-then-rerank", {
     "description": "Hybrid (RRF) + cross-encoder rerank",
+    "request_processors": [
+        {
+            "neural_query_enricher": {
+                "default_model_id": embedder_id,
+                "neural_field_default_id": {
+                    "dense": embedder_id 
+                }
+            }
+        }
+    ],
     "phase_results_processors": [
         {
             "score-ranker-processor": {

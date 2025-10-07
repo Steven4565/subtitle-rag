@@ -6,9 +6,10 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-
-subtitle_dir = "./subtitles/"
-videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
+subtitle_dir = "/subtitles/"
+current_directory_abspath = os.path.abspath(os.getcwd())
+joined_dir = current_directory_abspath + subtitle_dir 
+videos = [joined_dir + vid for vid in os.listdir(joined_dir)]
 
 client = OpenSearch(
     hosts=[{"host": "desktop", "port": 9200}],
