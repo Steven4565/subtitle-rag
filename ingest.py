@@ -6,7 +6,16 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Config
+
+index_name = "search-test"
+max_words_per_chunk = 200
+overlap = 0.3
 subtitle_dir = "/subtitles/"
+
+
+# Get subtitles
+
 current_directory_abspath = os.path.abspath(os.getcwd())
 joined_dir = current_directory_abspath + subtitle_dir 
 videos = [joined_dir + vid for vid in os.listdir(joined_dir)]
@@ -19,13 +28,6 @@ client = OpenSearch(
     ssl_assert_hostname=False,
     ssl_show_warn=False
 )
-
-index_name = "search-test"
-
-# Config
-
-max_words_per_chunk = 200
-overlap = 0.3
 
 step = max_words_per_chunk - int(max_words_per_chunk * overlap)
 
