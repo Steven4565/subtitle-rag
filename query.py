@@ -1,4 +1,5 @@
 from opensearchpy import OpenSearch
+import re
 import openai
 import os
 from dotenv import load_dotenv
@@ -26,7 +27,7 @@ def get_llm_prompt(context: str, query: str):
 
 def send_query(client: OpenSearch, index_name: str, query: str):
     body = {
-    "size": 10,
+    "size": 1,
     "query": {
         "hybrid": {
         "queries": [
@@ -77,11 +78,10 @@ def extract_subtitles(res):
 
     return sub_processed
 
-def format_for_llm(sub_list: List[List[srt.Subtitle]]): 
+def format_for_llm(sub_list: List[srt.Subtitle]): 
     formatted = ""
-    for video_sub in sub_list: 
-        for sub in video_sub:
-            formatted +=  f"{sub.index}: {sub.content}\n"
+    for sub in sub_list:
+        formatted +=  f"{sub.index}: {sub.content}\n"
 
     return formatted
 
@@ -97,34 +97,37 @@ def query_llm(prompt: str):
 
     if (not text): 
         raise ValueError("LLM did not generate text")
-    trimmed = text.replace("<think>", "")
-    trimmed = trimmed.replace("</think>", "")
-    trimmed = trimmed.strip()
 
+    trimmed = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     start, end = trimmed.split(",")
     return int(start), int(end)
 
 
+def main(): 
+    subtitle_dir = "./subtitles/"
+    videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
+
+    client = OpenSearch(
+        hosts=[{"host": "desktop", "port": 9200}],
+        http_auth=("admin", os.getenv("PASSWORD")),
+        use_ssl=True,
+        verify_certs=False,
+        ssl_assert_hostname=False,
+        ssl_show_warn=False
+    )
+
+    index_name = "search-test"
+
+    query = "How fast should voice agents respond?"
+
+    res = send_query(client, index_name, query)
+
+    sub_extracted = extract_subtitles(res)
+
+    start, end = query_llm(get_llm_prompt(format_for_llm(sub_extracted), query)) # Start and end IDs
+    print(start, end)
+
+
 # Run Query
-
-subtitle_dir = "./subtitles/"
-videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
-
-client = OpenSearch(
-    hosts=[{"host": "desktop", "port": 9200}],
-    http_auth=("admin", os.getenv("PASSWORD")),
-    use_ssl=True,
-    verify_certs=False,
-    ssl_assert_hostname=False,
-    ssl_show_warn=False
-)
-
-index_name = "search-test"
-
-query = "How fast should voice agents respond?"
-
-res = send_query(client, index_name, query)
-
-sub_extracted = extract_subtitles(res)
-
-start, end = query_llm(get_llm_prompt(format_for_llm([sub_extracted[0]]), query)) # Start and end IDs
+if __name__ == "__main__":
+    main()
