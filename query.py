@@ -59,20 +59,15 @@ def send_query(client: OpenSearch, index_name: str, query: str):
     hits = [hit["_source"] for hit in hits]
     return hits
 
-def extract_subtitles(res):
-# Find lines with ID
+def extract_subtitles(res, subtitle_list: List[srt.Subtitle]):
     sub_processed = []
-    for hit in res: 
-        sources = hit["sources"]
-        sub_url = hit["video"]
-        with open(sub_url, "r", encoding="utf-8") as f:
-            subtitles = list(srt.parse(f.read()))
+    ids = res[0]['sources']
 
-            sub_buffer = []
-            for sub in subtitles: 
-                if (sub.index in sources): 
-                    sub_buffer.append(sub)
-            sub_processed.append(sub_buffer)
+    sub_buffer = []
+    for sub in subtitle_list: 
+        if (sub.index in ids): 
+            sub_buffer.append(sub)
+    sub_processed.append(sub_buffer)
 
     return sub_processed
 
@@ -100,13 +95,28 @@ def query_llm(prompt: str):
     start, end = trimmed.split(",")
     return int(start), int(end)
 
+def get_subtitle(sub_url): 
+    with open(sub_url, "r", encoding="utf-8") as f:
+        subtitles = list(srt.parse(f.read()))
+        return subtitles
+
 def query_os(client, index_name, query):
     res = send_query(client, index_name, query)
 
-    sub_extracted = extract_subtitles(res)
+    subtitle_list = get_subtitle(res[0]["video"])
+    sub_extracted = extract_subtitles(res, subtitle_list)
 
     start, end = query_llm(get_llm_prompt(format_for_llm(sub_extracted), query)) # Start and end IDs
-    return start, end
+    start_timestamp = None
+    end_timestamp = None
+    for sub in subtitle_list:
+        if (sub.index == start):
+            start_timestamp = sub.start
+        if (sub.index == end):
+            start_timestamp = sub.end
+
+    return start_timestamp, end_timestamp
+
 
 # Run Query
 if __name__ == "__main__":
@@ -122,4 +132,4 @@ if __name__ == "__main__":
     index_name = "search-test"
 
     query_text = "How fast should voice agents respond?"
-    query_os(client, index_name, query_text)
+    print(query_os(client, index_name, query_text))

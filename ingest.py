@@ -1,14 +1,18 @@
 from opensearchpy import OpenSearch
 from opensearchpy.helpers import bulk
 from collections import deque
+from typing import List, TypedDict
 import srt
 import os
 from dotenv import load_dotenv
 load_dotenv()
 
+class SubtitleEntry(TypedDict): 
+    name: str
+    subs: List[srt.Subtitle]
 
 # Ingest
-def chunk_subtitles_by_words(videos, index_name, max_words_per_chunk=200, overlap_words=20):
+def chunk_and_send(client: OpenSearch, subtitles_map: List[SubtitleEntry], index_name: str, max_words_per_chunk=200, overlap_words=20):
     assert max_words_per_chunk > 0, "max_words_per_chunk must be > 0"
     assert 0 <= overlap_words < max_words_per_chunk, "0 <= overlap_words < max_words_per_chunk"
 
@@ -85,10 +89,9 @@ def chunk_subtitles_by_words(videos, index_name, max_words_per_chunk=200, overla
         buffer_slices.append(sl)
         current_words += (end_w - start_w)
 
-    for vid in videos:
-        with open(vid, "r", encoding="utf-8") as f:
-            subtitles = list(srt.parse(f.read()))
-
+    for sub_map in subtitles_map:
+        subtitles = sub_map['subs']
+        video_url = sub_map['name']
         for sub in subtitles:
             words = sub.content.split()
             i = 0
@@ -103,12 +106,12 @@ def chunk_subtitles_by_words(videos, index_name, max_words_per_chunk=200, overla
                     continue
 
                 if current_words == 0 and (n - i) > max_words_per_chunk:
-                    add_slice(vid, sub, words, i, i + max_words_per_chunk)
+                    add_slice(video_url, sub, words, i, i + max_words_per_chunk)
                     i += max_words_per_chunk
                     emit_chunk() 
                     continue
 
-                add_slice(vid, sub, words, i, i + take)
+                add_slice(video_url, sub, words, i, i + take)
                 i += take
 
                 if current_words >= max_words_per_chunk:
@@ -117,11 +120,8 @@ def chunk_subtitles_by_words(videos, index_name, max_words_per_chunk=200, overla
     if current_words > 0:
         emit_chunk()
 
-    return chunks
-
-def ingest_files(client, index_name, videos): 
-    chunks = chunk_subtitles_by_words(videos, index_name)
     bulk(client, actions=chunks)
+    return chunks
 
 
 if __name__ == "__main__":
@@ -140,7 +140,11 @@ if __name__ == "__main__":
     subtitle_dir = "/subtitles/"
     current_directory_abspath = os.path.abspath(os.getcwd())
     joined_dir = current_directory_abspath + subtitle_dir 
-    videos = [joined_dir + vid for vid in os.listdir(joined_dir)]
+    subtitles_url = [joined_dir + vid for vid in os.listdir(joined_dir)]
+    subtitles_list: List[SubtitleEntry] = []
+    for sub_url in subtitles_url: 
+        with open(sub_url, "r", encoding="utf-8") as f:
+            subtitles = list(srt.parse(f.read()))
+            subtitles_list.append({"name": sub_url, "subs": subtitles})
 
-
-    ingest_files(client, index_name, videos)
+    chunk_and_send(client, subtitles_list, index_name)
