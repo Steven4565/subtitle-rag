@@ -8,12 +8,10 @@ import srt
 
 load_dotenv()
 
-
 server_url = os.getenv("LLM_SERVER_URL")
 model_name = os.getenv("MODEL_NAME") or "hf.co/Qwen/Qwen3-8B-GGUF:Q5_K_M"
 
 llm = openai.OpenAI(base_url=server_url, api_key="dummy")
-
 
 def get_llm_prompt(context: str, query: str):
     prompt = f"""
@@ -102,11 +100,16 @@ def query_llm(prompt: str):
     start, end = trimmed.split(",")
     return int(start), int(end)
 
+def query_os(client, index_name, query):
+    res = send_query(client, index_name, query)
 
-def main(): 
-    subtitle_dir = "./subtitles/"
-    videos = [subtitle_dir + vid for vid in os.listdir(subtitle_dir)]
+    sub_extracted = extract_subtitles(res)
 
+    start, end = query_llm(get_llm_prompt(format_for_llm(sub_extracted), query)) # Start and end IDs
+    return start, end
+
+# Run Query
+if __name__ == "__main__":
     client = OpenSearch(
         hosts=[{"host": "desktop", "port": 9200}],
         http_auth=("admin", os.getenv("PASSWORD")),
@@ -118,16 +121,5 @@ def main():
 
     index_name = "search-test"
 
-    query = "How fast should voice agents respond?"
-
-    res = send_query(client, index_name, query)
-
-    sub_extracted = extract_subtitles(res)
-
-    start, end = query_llm(get_llm_prompt(format_for_llm(sub_extracted), query)) # Start and end IDs
-    print(start, end)
-
-
-# Run Query
-if __name__ == "__main__":
-    main()
+    query_text = "How fast should voice agents respond?"
+    query_os(client, index_name, query_text)

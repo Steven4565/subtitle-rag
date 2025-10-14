@@ -6,33 +6,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Config
-
-index_name = "search-test"
-max_words_per_chunk = 200
-overlap = 0.3
-subtitle_dir = "/subtitles/"
-
-
-# Get subtitles
-
-current_directory_abspath = os.path.abspath(os.getcwd())
-joined_dir = current_directory_abspath + subtitle_dir 
-videos = [joined_dir + vid for vid in os.listdir(joined_dir)]
-
-client = OpenSearch(
-    hosts=[{"host": "desktop", "port": 9200}],
-    http_auth=("admin", os.getenv("PASSWORD")),
-    use_ssl=True,
-    verify_certs=False,
-    ssl_assert_hostname=False,
-    ssl_show_warn=False
-)
-
-step = max_words_per_chunk - int(max_words_per_chunk * overlap)
 
 # Ingest
-def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
+def chunk_subtitles_by_words(videos, index_name, max_words_per_chunk=200, overlap_words=20):
     assert max_words_per_chunk > 0, "max_words_per_chunk must be > 0"
     assert 0 <= overlap_words < max_words_per_chunk, "0 <= overlap_words < max_words_per_chunk"
 
@@ -143,6 +119,28 @@ def chunk_subtitles_by_words(videos, max_words_per_chunk=120, overlap_words=20):
 
     return chunks
 
-chunks = chunk_subtitles_by_words(videos)
+def ingest_files(client, index_name, videos): 
+    chunks = chunk_subtitles_by_words(videos, index_name)
+    bulk(client, actions=chunks)
 
-bulk(client, actions=chunks)
+
+if __name__ == "__main__":
+    client = OpenSearch(
+        hosts=[{"host": "desktop", "port": 9200}],
+        http_auth=("admin", os.getenv("PASSWORD")),
+        use_ssl=True,
+        verify_certs=False,
+        ssl_assert_hostname=False,
+        ssl_show_warn=False
+    )
+    index_name = "search-test"
+
+
+    # Get subtitles
+    subtitle_dir = "/subtitles/"
+    current_directory_abspath = os.path.abspath(os.getcwd())
+    joined_dir = current_directory_abspath + subtitle_dir 
+    videos = [joined_dir + vid for vid in os.listdir(joined_dir)]
+
+
+    ingest_files(client, index_name, videos)
