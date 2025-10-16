@@ -3,6 +3,7 @@ import os
 from opensearchpy import OpenSearch
 from ingest import chunk_and_send
 from query import query_os
+from datetime import timedelta
 import srt
 
 index_name = "search-test"
@@ -57,13 +58,27 @@ def handle_submit(files):
         st.error(f"Ingest failed — {e}")
 
 def handle_query_change():
+    def format_timestamp(td): 
+        total_seconds = td.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int(total_seconds // 60)
+        seconds = int(total_seconds % 60)
+        microseconds = td.microseconds
+
+        formatted = f"{minutes}:{seconds}:{microseconds}"
+        if (hours > 0):
+            return f"{hours}:{formatted}"
+        return formatted
+
+
     q = st.session_state.get("query", "").strip()
     if not q:
         return
     try:
         start, end= query_os(get_client(), index_name, q)
+
         st.write("**Query Result:**")
-        st.write(start, end) # TODO: write this in human readable format
+        st.write(format_timestamp(start), format_timestamp(end))
     except Exception as e:
         st.error(f"Query error — {e}")
 

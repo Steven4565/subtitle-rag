@@ -75,7 +75,6 @@ def extract_subtitles(res, subtitle_list: List[srt.Subtitle]):
 def format_for_llm(sub_list: List[srt.Subtitle]): 
     formatted = ""
     for sub in sub_list:
-        print(sub)
         formatted +=  f"{sub.index}: {sub.content}\n"
 
     return formatted
