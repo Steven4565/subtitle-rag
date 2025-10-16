@@ -3,7 +3,6 @@ import os
 from opensearchpy import OpenSearch
 from ingest import chunk_and_send
 from query import query_os
-from datetime import timedelta
 import srt
 
 index_name = "search-test"
