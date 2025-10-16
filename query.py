@@ -15,10 +15,11 @@ llm = openai.OpenAI(base_url=server_url, api_key="dummy")
 
 def get_llm_prompt(context: str, query: str):
     prompt = f"""
-    You are an agent for extracting video segments using the given query. Your task is to figure out which chunk of the passage can answer the user's query. You need to output the ID of two timestamps: the start of the chunk that contains the information and the end of the chunk that contains the information.
+You are an agent for extracting video segments using the given query. Your task is to figure out which chunk of the passage can answer the user's query. You need to output the ID of two timestamps: the start of the chunk that contains the information and the end of the chunk that contains the information.
 
-    Context: {context}
-    Query: {query}
+Context: 
+{context}
+Query: {query}
     """
     return prompt
 
@@ -74,6 +75,7 @@ def extract_subtitles(res, subtitle_list: List[srt.Subtitle]):
 def format_for_llm(sub_list: List[srt.Subtitle]): 
     formatted = ""
     for sub in sub_list:
+        print(sub)
         formatted +=  f"{sub.index}: {sub.content}\n"
 
     return formatted
@@ -104,9 +106,12 @@ def query_os(client, index_name, query):
     res = send_query(client, index_name, query)
 
     subtitle_list = get_subtitle(res[0]["video"])
-    sub_extracted = extract_subtitles(res, subtitle_list)
+    sub_extracted = extract_subtitles(res, subtitle_list)[0]
 
-    start, end = query_llm(get_llm_prompt(format_for_llm(sub_extracted), query)) # Start and end IDs
+    formatted = format_for_llm(sub_extracted)
+    llm_prompt = get_llm_prompt(formatted, query)
+
+    start, end = query_llm(llm_prompt) # Start and end IDs
     start_timestamp = None
     end_timestamp = None
     for sub in subtitle_list:
@@ -121,12 +126,12 @@ def query_os(client, index_name, query):
 # Run Query
 if __name__ == "__main__":
     client = OpenSearch(
-        hosts=[{"host": "desktop", "port": 9200}],
+        hosts=[{"host": os.getenv("HOST"), "port": os.getenv("PORT")}],
         http_auth=("admin", os.getenv("PASSWORD")),
         use_ssl=True,
-        verify_certs=False,
-        ssl_assert_hostname=False,
-        ssl_show_warn=False
+        verify_certs=False,          # dev only; better: set ca_certs="path/to/root-ca.pem"
+        ssl_assert_hostname=False,   # dev only
+        ssl_show_warn=False          # hide warnings in dev
     )
 
     index_name = "search-test"

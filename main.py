@@ -22,29 +22,37 @@ st.title("Subtitle Based Video Retriever")
 @st.cache_resource
 def get_client(): 
     client = OpenSearch(
-        hosts=[{"host": "desktop", "port": 9200}],
+        hosts=[{"host": os.getenv("HOST"), "port": os.getenv("PORT")}],
         http_auth=("admin", os.getenv("PASSWORD")),
         use_ssl=True,
-        verify_certs=False,
-        ssl_assert_hostname=False,
-        ssl_show_warn=False
+        verify_certs=False,          # dev only; better: set ca_certs="path/to/root-ca.pem"
+        ssl_assert_hostname=False,   # dev only
+        ssl_show_warn=False          # hide warnings in dev
     )
     return client
 
-def handle_submit():
+def handle_submit(files):
+    os.makedirs(subtitle_dir, exist_ok=True)
+
     items = st.session_state.get("to_ingest", [])
     if not items:
         st.warning("No parsed subtitle files to ingest.")
         return
 
     try:
-        os.makedirs("saved_subtitles")
+        # Save file locally
+        os.makedirs("saved_subtitles", exist_ok=True)
+        for file in files: 
+            file_path = subtitle_dir + file.name
+            with open(file_path, "wb") as f: 
+                f.write(file.getbuffer())
+
+
         chunk_and_send(get_client(), items, index_name)
         st.success(f"Ingested {len(items)} file(s).")
 
         st.session_state.to_ingest = []
         st.session_state.uploader_key += 1
-        st.rerun()
     except Exception as e:
         st.error(f"Ingest failed — {e}")
 
@@ -75,16 +83,14 @@ else:
         if name in existing_names:
             continue
         try:
+            file_path = subtitle_dir + name
             text = upl.getvalue().decode("utf-8", errors="replace")
             subs = list(srt.parse(text))
-            st.session_state.to_ingest.append({"name": name, "subs": subs})
-            st.caption(f"✅ {name} — parsed {len(subs)} subtitles.")
-        except srt.SRTParseError as e:
-            st.error(f"{name}: SRT parse error — {e}")
+            st.session_state.to_ingest.append({"name": file_path, "subs": subs})
         except Exception as e:
             st.error(f"{name}: Unexpected error — {e}")
 
-st.button("Submit", on_click=handle_submit)
+st.button("Submit", on_click=lambda: handle_submit(files))
 st.divider()
 
 st.text_input("query", key="query", on_change=handle_query_change)

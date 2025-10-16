@@ -112,7 +112,7 @@ def setup_os(index_name, client, ml_client):
 
 if __name__ == "__main__":
     client = OpenSearch(
-        hosts=[{"host": "desktop", "port": 9200}],
+        hosts=[{"host": os.getenv("HOST"), "port": os.getenv("PORT")}],
         http_auth=("admin", os.getenv("PASSWORD")),
         use_ssl=True,
         verify_certs=False,          # dev only; better: set ca_certs="path/to/root-ca.pem"

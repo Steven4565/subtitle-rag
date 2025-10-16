@@ -126,12 +126,12 @@ def chunk_and_send(client: OpenSearch, subtitles_map: List[SubtitleEntry], index
 
 if __name__ == "__main__":
     client = OpenSearch(
-        hosts=[{"host": "desktop", "port": 9200}],
+        hosts=[{"host": os.getenv("HOST"), "port": os.getenv("PORT")}],
         http_auth=("admin", os.getenv("PASSWORD")),
         use_ssl=True,
-        verify_certs=False,
-        ssl_assert_hostname=False,
-        ssl_show_warn=False
+        verify_certs=False,          # dev only; better: set ca_certs="path/to/root-ca.pem"
+        ssl_assert_hostname=False,   # dev only
+        ssl_show_warn=False          # hide warnings in dev
     )
     index_name = "search-test"
 
